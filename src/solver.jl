@@ -5,8 +5,8 @@ include("kernels.jl")
 
 function acoustic_solver_basic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals; blockx=16, blocky=16, order=4, recordWaveField=false)
 
-    check_order!(order)
-    check_source_vals!(source_vals, source_num, Nt)
+    source_position = check_source_position(source_position, source_num)
+    source_vals = check_source_vals(source_vals, Nt, source_num)
 
     # to device
     source_vals_device, source_position_x, source_position_y = to_device_source(source_position, source_vals, source_num, Nt)
@@ -66,7 +66,8 @@ end
 
 function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, pml_len, pml_coef; blockx=16, blocky=16, order=4, recordWaveField=false)
 
-    check_order!(order)
+    source_position = check_source_position(source_position, source_num)
+    source_vals = check_source_vals(source_vals, Nt, source_num)
 
     # parameters
     Nx_pml = Nx + 2*pml_len
@@ -85,7 +86,9 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
     a_x, a_y, b_pml = init_parameters_pml(myReal, a, b, pml_len)
     sigma_x, sigma_y, sigma_x_half, sigma_y_half = build_sigma(myReal, Nx, Ny, pml_len, pml_coef)
     if recordWaveField == true
-        U = CUDA.zeros(myReal, Nx, Ny, Nt)
+        # U = CUDA.zeros(myReal, Nx, Ny, Nt)
+        U = CUDA.zeros(myReal, Nx_pml, Ny_pml, Nt)
+
     end
 
     # main loop, different order
@@ -102,7 +105,8 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
             @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
         
             if recordWaveField == true
-                U[:, :, idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+                # U[:, :, idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+                U[:, :, idx_time] = u
             end
     
         end

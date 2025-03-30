@@ -32,6 +32,20 @@ function update_source!(u, source_position_x, source_position_y, source_vals, so
     return nothing
 end
 
+function update_source_idx!(u, source_position_x, source_position_y, source_vals, idx_source, idx_time, dt)
+
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    if i == idx_source
+        ix, iy = source_position_x[i], source_position_y[i]
+        if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
+            u[ix, iy] += source_vals[idx_time, i] * dt
+        end
+    end
+
+    return nothing
+end
+
 # ==============================
 # RECEIVER
 # ==============================

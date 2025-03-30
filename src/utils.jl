@@ -36,8 +36,10 @@ function build_sigma(myReal, Nx, Ny, pml_len, pml_coef)
     sigma_y = zeros(myReal, Nx + 2*pml_len, Ny + 2*pml_len)
     sigma_x_half = zeros(myReal, Nx + 2*pml_len-1, Ny + 2*pml_len)
     sigma_y_half = zeros(myReal, Nx + 2*pml_len, Ny + 2*pml_len-1)
-    vals = range(0,1,pml_len * 2 - 1) * pml_coef
-    vals = vals .^ 2
+    # vals = range(0,1,pml_len * 2 - 1) * pml_coef
+    # vals = vals .^ 2
+    vals = range(0,1,pml_len * 2 - 1)
+    vals = vals .^ 2 * pml_coef
     for i = 1:pml_len
         sigma_x[pml_len-i+1,:] .= vals[(i-1)*2+1]
         sigma_x[Nx + pml_len + i,:] .= vals[(i-1)*2+1]
@@ -117,21 +119,21 @@ end
 # source and receiver to device
 function to_device_source(source_position, source_vals, source_num, Nt)
 
-    source_vals_device = CuArray{myReal}(reshape(source_vals, source_num, Nt))
-    source_position_x = CuArray{myInt}(reshape(source_position, source_num, 2)[:,1])
-    source_position_y = CuArray{myInt}(reshape(source_position, source_num, 2)[:,2])
+    source_vals_device = CuArray{myReal}(source_vals)
+    source_position_x = CuArray{myInt}(source_position[1,:])
+    source_position_y = CuArray{myInt}(source_position[2,:])
 
     return source_vals_device, source_position_x, source_position_y
 end
 
 function to_device_source_receiver(source_position, source_vals, source_num, Nt, receiver_position, receiver_num)
 
-    source_vals_device = CuArray{myReal}(reshape(source_vals, source_num, Nt))
-    source_position_x = CuArray{myInt}(reshape(source_position, source_num, 2)[:,1])
-    source_position_y = CuArray{myInt}(reshape(source_position, source_num, 2)[:,2])
+    source_vals_device = CuArray{myReal}(source_vals)
+    source_position_x = CuArray{myInt}(source_position[1,:])
+    source_position_y = CuArray{myInt}(source_position[2,:])
 
-    receiver_position_x = CuArray{myInt}(reshape(receiver_position, receiver_num, 2)[:,1])
-    receiver_position_y = CuArray{myInt}(reshape(receiver_position, receiver_num, 2)[:,2])
+    receiver_position_x = CuArray{myInt}(receiver_position[1,:])
+    receiver_position_y = CuArray{myInt}(receiver_position[2,:])
 
     return source_vals_device, source_position_x, source_position_y, receiver_position_x, receiver_position_y
 end
