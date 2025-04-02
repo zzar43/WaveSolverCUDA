@@ -88,7 +88,6 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
     if recordWaveField == true
         # U = CUDA.zeros(myReal, Nx, Ny, Nt)
         U = CUDA.zeros(myReal, Nx_pml, Ny_pml, Nt)
-
     end
 
     # main loop, different order

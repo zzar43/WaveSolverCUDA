@@ -36,10 +36,25 @@ function build_sigma(myReal, Nx, Ny, pml_len, pml_coef)
     sigma_y = zeros(myReal, Nx + 2*pml_len, Ny + 2*pml_len)
     sigma_x_half = zeros(myReal, Nx + 2*pml_len-1, Ny + 2*pml_len)
     sigma_y_half = zeros(myReal, Nx + 2*pml_len, Ny + 2*pml_len-1)
+    # case 1
     # vals = range(0,1,pml_len * 2 - 1) * pml_coef
     # vals = vals .^ 2
+    # case 2
     vals = range(0,1,pml_len * 2 - 1)
     vals = vals .^ 2 * pml_coef
+    # case 3, m = 3 or 4
+    # m = 4
+    # # R = 1e-10
+    # R = pml_coef
+    # pml_len1 = pml_len * 2 - 1
+    # sigma_max = -3 * 1000 * log(R) / (2 * dx/2 * pml_len1)
+    # vals = zeros(pml_len1)
+    # for i in 1:pml_len1
+    #     x = (pml_len1-i) * dx/2
+    #     vals[i] = sigma_max * (x / (pml_len1*dx/2))^m
+    # end
+    # reverse!(vals)
+
     for i = 1:pml_len
         sigma_x[pml_len-i+1,:] .= vals[(i-1)*2+1]
         sigma_x[Nx + pml_len + i,:] .= vals[(i-1)*2+1]
