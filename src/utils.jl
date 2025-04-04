@@ -153,4 +153,15 @@ function to_device_source_receiver(source_position, source_vals, source_num, Nt,
     return source_vals_device, source_position_x, source_position_y, receiver_position_x, receiver_position_y
 end
 
+function to_device_single_source_multiple_receiver(source_position, source_vals, receiver_position)
 
+    source_vals_device = CuArray{myReal}(source_vals)
+    source_position_x = source_position[1]
+    source_position_y = source_position[2]
+
+    receiver_position_x = CuArray{myInt}(receiver_position[1,:])
+    receiver_position_y = CuArray{myInt}(receiver_position[2,:])
+
+    return source_vals_device, source_position_x, source_position_y, receiver_position_x, receiver_position_y
+
+end

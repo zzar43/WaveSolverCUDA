@@ -50,7 +50,6 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
 
             data0 = CUDA.zeros(myReal, Nt, receiver_num)
             u, vx, vy, wx, wy = init_grid_pml(myReal, Nx, Ny, pml_len)
-            a_x, a_y, b_pml = init_parameters_pml(myReal, a, b, pml_len)
 
             for idx_time = 1:Nt
                 @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
@@ -93,5 +92,15 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
     else
         return Array{myReal}(data)
     end
+
+end
+
+function forward_acoustic_c(c, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, idx_source=0, recordWaveField=false, saveRatio=1)
+
+    rho = 1000 .* ones(size(c))
+    a = -1 ./ rho
+    b = -1 .* rho .* c.^2
+
+    return forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=blockx, blocky=blocky, idx_source=idx_source, recordWaveField=recordWaveField, saveRatio=saveRatio)
 
 end
