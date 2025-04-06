@@ -3,7 +3,7 @@ using BenchmarkTools, JLD2, CairoMakie
 include("src/adjoint.jl")
 include("src/forward.jl")
 
-demo = 2
+demo = 1
 
 try
     readdir("data/adjoint_demo/")

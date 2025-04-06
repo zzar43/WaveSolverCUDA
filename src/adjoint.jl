@@ -41,6 +41,52 @@ function time_int_wavefield_c!(U, c, grad, dt)
     return nothing
 end
 
+function adj_forward_modeling!(U, u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml, source_position_x, source_position_y, source_vals_device, idx_source, sigma_x_half, sigma_y_half, a_x, a_y, receiver_position_x, receiver_position_y, forward_data, receiver_num, saveRatio, pml_len, cublocks, cublocks_source, cublocks_receiver, cuthreads, cuthreads_source, cuthreads_receiver)
+
+    # forward
+    for idx_time = 1:Nt
+
+        @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
+
+        @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
+
+        @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
+
+        @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
+
+        @cuda blocks=cublocks_receiver threads=cuthreads_receiver record_wavefield!(u, receiver_position_x, receiver_position_y, forward_data, receiver_num, idx_time)
+
+        # U[:,:,idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+        if idx_time % saveRatio == 0
+            U[:, :, Int(ceil(idx_time/saveRatio))] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+        end
+
+    end
+
+    return nothing
+end
+
+function adj_backward_modeling!(U, u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, Nt, sigma_x_half, sigma_y_half, a_x, a_y, saveRatio, pml_len, cublocks, cublocks_receiver, cuthreads, cuthreads_receiver)
+
+    for idx_time = 1:Nt
+
+        @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
+
+        @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, Nt-idx_time+1, dt)
+    
+        @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
+    
+        @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
+
+        # U[:,:,Nt-idx_time+1] .*= u[pml_len+1:Nx+pml_len, pml_len+1:Ny+pml_len]
+        if idx_time % saveRatio == 0
+            U[:,:,Int(ceil((Nt-idx_time+1)/saveRatio))] .*= u[pml_len+1:Nx+pml_len, pml_len+1:Ny+pml_len]
+        end
+        
+    end
+    return nothing
+end
+
 function adjoint_single_source_c(data, c, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, idx_source, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, saveRatio=1)
 
     @assert (Nt, receiver_num) == size(data) "The size of data should be (Nt, receiver_num)"
@@ -77,23 +123,7 @@ function adjoint_single_source_c(data, c, Nx, Ny, Nt, dx, dy, dt, source_num, so
     U = CUDA.zeros(myReal, Nx, Ny, Int(floor(Nt/saveRatio)))
     grad = CUDA.zeros(myReal, Nx, Ny)
 
-    # forward
-    for idx_time = 1:Nt
-        @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
-
-        @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
-
-        @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
-
-        @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
-
-        @cuda blocks=cublocks_receiver threads=cuthreads_receiver record_wavefield!(u, receiver_position_x, receiver_position_y, forward_data, receiver_num, idx_time)
-
-        # U[:,:,idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
-        if idx_time % saveRatio == 0
-            U[:, :, Int(ceil(idx_time/saveRatio))] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
-        end
-    end
+    adj_forward_modeling!(U, u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml, source_position_x, source_position_y, source_vals_device, idx_source, sigma_x_half, sigma_y_half, a_x, a_y, receiver_position_x, receiver_position_y, forward_data, receiver_num, saveRatio, pml_len, cublocks, cublocks_source, cublocks_receiver, cuthreads, cuthreads_source, cuthreads_receiver)
 
     # time differential
     @cuda blocks=cublocks threads=cuthreads diff_twice_time_wavefield!(U, dt)
@@ -101,21 +131,7 @@ function adjoint_single_source_c(data, c, Nx, Ny, Nt, dx, dy, dt, source_num, so
     u, vx, vy, wx, wy = init_grid_pml(myReal, Nx, Ny, pml_len)
     adjoint_source = CuArray{myReal}(data) - forward_data
 
-    for idx_time = 1:Nt
-
-        @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
-
-        @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, Nt-idx_time+1, dt)
-    
-        @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
-    
-        @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
-
-        # U[:,:,Nt-idx_time+1] .*= u[pml_len+1:Nx+pml_len, pml_len+1:Ny+pml_len]
-        if idx_time % saveRatio == 0
-            U[:,:,Int(ceil((Nt-idx_time+1)/saveRatio))] .*= u[pml_len+1:Nx+pml_len, pml_len+1:Ny+pml_len]
-        end
-    end
+    adj_backward_modeling!(U, u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, Nt, sigma_x_half, sigma_y_half, a_x, a_y, saveRatio, pml_len, cublocks, cublocks_receiver, cuthreads, cuthreads_receiver)
 
     @cuda blocks=cublocks threads=cuthreads time_int_wavefield_c!(U, c, grad, dt)
 
