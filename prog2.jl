@@ -44,3 +44,8 @@ println("    Done.")
 println("    Computing adjoint...")
 CUDA.@profile gg = adjoint_c(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16)
 println("    Done")
+
+CUDA.@profile gg = adjoint_c_host_ram(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16)
+
+U = zeros(Nx, Ny, Nt)
+@time grad = sum(U, dims=3)[:,:,1] * dt
