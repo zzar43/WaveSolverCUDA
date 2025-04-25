@@ -1,7 +1,9 @@
 using BenchmarkTools, JLD2, CairoMakie
 
-include("src/adjoint.jl")
-include("src/forward.jl")
+# include("src/adjoint.jl")
+# include("src/forward.jl")
+include("src/WaveSolverCuda.jl")
+using .WaveSolverCuda
 
 demo = 2
 
@@ -65,6 +67,10 @@ if demo == 1
     println("    Computing adjoint...")
     CUDA.@time gg = adjoint_c(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16)
     println("    Done")
+
+    # println("    Computing adjoint using host ram...")
+    # CUDA.@time gg = adjoint_c_host_ram(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16)
+    # println("    Done.")
     
     img = Array{myReal}(gg)
     val = maximum(img)
