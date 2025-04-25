@@ -260,8 +260,6 @@ function adjoint_single_source_c_host_ram(data, c, Nx, Ny, Nt, dx, dy, dt, sourc
     return Array{myReal}(grad)
 end
 
-
-
 function adjoint_c(data, c, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, saveRatio=1)
 
     grad = Array{myReal}(0 .* c)

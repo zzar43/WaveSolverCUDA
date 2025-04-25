@@ -1,9 +1,12 @@
 # This is a demo for forward modeling.
 
-include("src/solver.jl")
-include("src/forward.jl")
+# include("src/solver.jl")
+# include("src/forward.jl")
 
 using BenchmarkTools, CairoMakie, JLD2
+
+include("src/WaveSolverCuda.jl")
+using .WaveSolverCuda
 
 demo = 2
 
