@@ -1,4 +1,5 @@
-# WaveSolverCuda
+# WaveSolverCUDA
+
 This is a wave solver in julia and cuda.
 
 What is next?

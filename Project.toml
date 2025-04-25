@@ -1,0 +1,7 @@
+name = "WaveSolverCUDA"
+uuid = "00000000-0000-0000-0000-000000000000"
+authors = ["Da Li"]
+version = "0.0.1-DEV"
+
+[compat]
+julia = "1.6.7"

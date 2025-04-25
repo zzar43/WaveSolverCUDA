@@ -1,6 +1,6 @@
 include("base.jl")
 
-module WaveSolverCuda
+module WaveSolverCUDA
 
 include("forward.jl")
 export forward_acoustic, forward_acoustic_c
