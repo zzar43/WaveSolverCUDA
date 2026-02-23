@@ -165,3 +165,109 @@ function to_device_single_source_multiple_receiver(source_position, source_vals,
     return source_vals_device, source_position_x, source_position_y, receiver_position_x, receiver_position_y
 
 end
+
+# Precompile function (defined after forward.jl so forward_acoustic is available)
+function precompile_cuda_kernels(; blockx=16, blocky=16)
+    """
+    Precompile all CUDA kernels by running them once with minimal data.
+    This should be called once at the start of a session to avoid first-run slowdowns.
+    """
+    # Minimal dimensions for precompilation
+    Nx = 64
+    Ny = 64
+    Nt = 2
+    dx = 1.0
+    dy = 1.0
+    dt = 0.001
+    t = range(0, (Nt-1)*dt, Nt)
+    pml_len = 10
+    pml_coef = 1.0
+    source_num = 2
+    receiver_num = 2
+    
+    # Create minimal test data
+    c = 1000.0f0 .* ones(myReal, Nx, Ny)
+    rho = 1000.0f0 .* ones(myReal, Nx, Ny)
+    a = 1.0f0 ./ rho
+    b = rho .* c.^2
+
+    source_num = 2
+    source_position = zeros(2,source_num)
+    for i = 1:source_num
+        source_position[1,i] = 1
+        source_position[2,i] = 1 + (i-1)*1
+    end
+    source_vals = zeros(Nt, source_num)
+    for i = 1:source_num
+        source_vals[:,i] = source_ricker_int(12,0.2,t) * 1e6
+    end
+
+    receiver_num = 2
+    receiver_position = zeros(2, receiver_num)
+    for i = 1:receiver_num
+        receiver_position[1,i] = 1
+        receiver_position[2,i] = (i-1)*2 + 1
+    end
+
+    
+    # Precompile PML kernels (most commonly used)
+    try
+        forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=blockx, blocky=blocky, idx_source=1, recordWaveField=true)
+        CUDA.synchronize()
+        forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=blockx, blocky=blocky, idx_source=1, recordWaveField=false)
+        CUDA.synchronize()
+    catch e
+        @warn "Precompilation warning: $e"
+    end
+    
+    return nothing
+end
+
+function testing(; blockx=16, blocky=16)
+
+    # Minimal dimensions for precompilation
+    Nx = 256
+    Ny = 256
+    Nt = 200
+    dx = 1.0
+    dy = 1.0
+    dt = 0.001
+    t = range(0, (Nt-1)*dt, Nt)
+    pml_len = 50
+    pml_coef = 1.0
+    source_num = 2
+    receiver_num = 2
+    
+    # Create minimal test data
+    c = 1000.0f0 .* ones(myReal, Nx, Ny)
+    rho = 1000.0f0 .* ones(myReal, Nx, Ny)
+    a = 1.0f0 ./ rho
+    b = rho .* c.^2
+
+    source_num = 2
+    source_position = zeros(2,source_num)
+    for i = 1:source_num
+        source_position[1,i] = 1
+        source_position[2,i] = 1 + (i-1)*1
+    end
+    source_vals = zeros(Nt, source_num)
+    for i = 1:source_num
+        source_vals[:,i] = source_ricker_int(12,0.2,t) * 1e6
+    end
+
+    receiver_num = 2
+    receiver_position = zeros(2, receiver_num)
+    for i = 1:receiver_num
+        receiver_position[1,i] = 1
+        receiver_position[2,i] = (i-1)*2 + 1
+    end
+
+    try
+        forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=blockx, blocky=blocky, idx_source=1, recordWaveField=true)
+        CUDA.synchronize()
+    catch e
+        @warn "Precompilation warning: $e"
+    end
+    
+    return nothing
+end

@@ -34,7 +34,7 @@ function acoustic_solver_basic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_
             @cuda blocks=cublocks threads=cuthreads update_velocity_4th!(u, vx, vy, a_x, a_y, dx, dy, dt, Nx, Ny)
 
             if recordWaveField == true
-                U[:, :, idx_time] = u
+                @inbounds CUDA.@allowscalar U[:, :, idx_time] .= u
             end
 
         end
@@ -50,7 +50,7 @@ function acoustic_solver_basic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_
             @cuda blocks=cublocks threads=cuthreads update_velocity_2nd!(u, vx, vy, a_x, a_y, dx, dy, dt, Nx, Ny)
 
             if recordWaveField == true
-                U[:, :, idx_time] = u
+                @inbounds CUDA.@allowscalar U[:, :, idx_time] .= u
             end
 
         end
@@ -86,8 +86,8 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
     a_x, a_y, b_pml = init_parameters_pml(myReal, a, b, pml_len)
     sigma_x, sigma_y, sigma_x_half, sigma_y_half = build_sigma(myReal, Nx, Ny, pml_len, pml_coef)
     if recordWaveField == true
-        # U = CUDA.zeros(myReal, Nx, Ny, Nt)
-        U = CUDA.zeros(myReal, Nx_pml, Ny_pml, Nt)
+        U = CUDA.zeros(myReal, Nx, Ny, Nt)
+        # U = CUDA.zeros(myReal, Nx_pml, Ny_pml, Nt)
     end
 
     # main loop, different order
@@ -104,8 +104,7 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
             @cuda blocks=cublocks threads=cuthreads update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
         
             if recordWaveField == true
-                # U[:, :, idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
-                U[:, :, idx_time] = u
+                @inbounds CUDA.@allowscalar U[:, :, idx_time] .= @view u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
             end
     
         end
@@ -123,7 +122,7 @@ function acoustic_solver_pml(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_po
             @cuda blocks=cublocks threads=cuthreads update_velocity_pml_2nd!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_y, dx, dy, dt, Nx_pml, Ny_pml)
         
             if recordWaveField == true
-                U[:, :, idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+                @inbounds CUDA.@allowscalar U[:, :, idx_time] .= @view u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
             end
     
         end

@@ -3,12 +3,17 @@
 # include("src/solver.jl")
 # include("src/forward.jl")
 
-using BenchmarkTools, CairoMakie, JLD2
+using BenchmarkTools, CairoMakie, JLD2, CUDA
 
-include("src/WaveSolverCuda.jl")
-using .WaveSolverCuda
+include("src/WaveSolverCUDA.jl")
+using .WaveSolverCUDA
 
-demo = 2
+# Precompile CUDA kernels once at startup
+println("Precompiling CUDA kernels...")
+@time precompile_cuda_kernels(blockx=16, blocky=16)
+println("Precompilation complete.")
+
+demo = 1
 
 try
     readdir("data/forward_demo/")

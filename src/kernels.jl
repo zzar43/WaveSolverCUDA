@@ -435,58 +435,102 @@ function update_velocity_pml_4th!(u, vx, vy, sigma_x_half, sigma_y_half, a_x, a_
     return nothing
 end
 
+"""
+    update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx, Ny)
+
+Update the auxiliary fields wx, wy using 4th-order finite differences and PML terms.
+
+Performance suggestions and improvements:
+- Use local variables for commonly used expressions and array accesses to reduce repeated memory reads, especially on the GPU.
+- Use `@inbounds` around the whole function or at the block level to minimize bounds-check overhead (inside each valid branch).
+- Reduce repeated computation of indices.
+- Consider reducing register pressure by splitting into two kernel launches if register spilling is severe; here, we stick to a single kernel for clarity.
+- Avoid repeated accesses of parameters like dt, dx, dy, Nx, Ny by passing them as constants or ensuring compile-time constness (not shown here—just as a general note).
+"""
+
 function update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx, Ny)
-    
     i = (blockIdx().x-1) * blockDim().x + threadIdx().x
     j = (blockIdx().y-1) * blockDim().y + threadIdx().y
 
-    # center
-    if i > 2 && i < Nx-1 && j > 2 && j < Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (vx[i-2,j] - 27*vx[i-1,j] + 27*vx[i,j] - vx[i+1,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (vy[i,j-2] - 27*vy[i,j-1] + 27*vy[i,j] - vy[i,j+1]) / (24*dy)
+    @inbounds begin
+        if i > 2 && i < Nx-1 && j > 2 && j < Ny-1
+            # Center: all regular 4th-order stencils
+            vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]
+            wx[i,j] += dt * sigma_y[i,j] * (vxm2 - 27vxm1 + 27vxi - vxp1) / (24dx)
+
+            vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]
+            wy[i,j] += dt * sigma_x[i,j] * (vy_m2 - 27vy_m1 + 27vy_i - vy_p1) / (24dy)
+        elseif i == 2 && j > 2 && j < Ny-1
+            # Left edge (excluding corners)
+            vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]; vxp2 = vx[i+2, j]; vxp3 = vx[i+3, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-22vxm1 + 17vxi + 9vxp1 - 5vxp2 + vxp3) / (24dx)
+
+            vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]
+            wy[i,j] += dt * sigma_x[i,j] * (vy_m2 - 27vy_m1 + 27vy_i - vy_p1) / (24dy)
+        elseif i == Nx-1 && j > 2 && j < Ny-1
+            # Right edge (excluding corners)
+            vxm4 = vx[i-4, j]; vxm3 = vx[i-3, j]; vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-1vxm4 + 5vxm3 - 9vxm2 - 17vxm1 + 22vxi) / (24dx)
+
+            vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]
+            wy[i,j] += dt * sigma_x[i,j] * (vy_m2 - 27vy_m1 + 27vy_i - vy_p1) / (24dy)
+        elseif i > 2 && i < Nx-1 && j == 2
+            # Bottom edge (excluding corners)
+            vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]
+            wx[i,j] += dt * sigma_y[i,j] * (vxm2 - 27vxm1 + 27vxi - vxp1) / (24dx)
+
+            vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]; vy_p2 = vy[i, j+2]; vy_p3 = vy[i, j+3]
+            wy[i,j] += dt * sigma_x[i,j] * (-22vy_m1 + 17vy_i + 9vy_p1 - 5vy_p2 + vy_p3) / (24dy)
+        elseif i > 2 && i < Nx-1 && j == Ny-1
+            # Top edge (excluding corners)
+            vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]
+            wx[i,j] += dt * sigma_y[i,j] * (vxm2 - 27vxm1 + 27vxi - vxp1) / (24dx)
+
+            vy_m4 = vy[i, j-4]; vy_m3 = vy[i, j-3]; vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]
+            wy[i,j] += dt * sigma_x[i,j] * (-1vy_m4 + 5vy_m3 - 9vy_m2 - 17vy_m1 + 22vy_i) / (24dy)
+        elseif i == 2 && j == 2
+            # Lower-left corner
+            vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]; vxp2 = vx[i+2, j]; vxp3 = vx[i+3, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-22vxm1 + 17vxi + 9vxp1 - 5vxp2 + vxp3) / (24dx)
+
+            vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]; vy_p2 = vy[i, j+2]; vy_p3 = vy[i, j+3]
+            wy[i,j] += dt * sigma_x[i,j] * (-22vy_m1 + 17vy_i + 9vy_p1 - 5vy_p2 + vy_p3) / (24dy)
+        elseif i == Nx-1 && j == 2
+            # Lower-right corner
+            vxm4 = vx[i-4, j]; vxm3 = vx[i-3, j]; vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-1vxm4 + 5vxm3 - 9vxm2 - 17vxm1 + 22vxi) / (24dx)
+
+            vy_m1 = vy[i, j-1]; vy_i = vy[i, j]; vy_p1 = vy[i, j+1]; vy_p2 = vy[i, j+2]; vy_p3 = vy[i, j+3]
+            wy[i,j] += dt * sigma_x[i,j] * (-22vy_m1 + 17vy_i + 9vy_p1 - 5vy_p2 + vy_p3) / (24dy)
+        elseif i == 2 && j == Ny-1
+            # Upper-left corner
+            vxm1 = vx[i-1, j]; vxi = vx[i, j]; vxp1 = vx[i+1, j]; vxp2 = vx[i+2, j]; vxp3 = vx[i+3, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-22vxm1 + 17vxi + 9vxp1 - 5vxp2 + vxp3) / (24dx)
+
+            vy_m4 = vy[i, j-4]; vy_m3 = vy[i, j-3]; vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]
+            wy[i,j] += dt * sigma_x[i,j] * (-1vy_m4 + 5vy_m3 - 9vy_m2 - 17vy_m1 + 22vy_i) / (24dy)
+        elseif i == Nx-1 && j == Ny-1
+            # Upper-right corner
+            vxm4 = vx[i-4, j]; vxm3 = vx[i-3, j]; vxm2 = vx[i-2, j]; vxm1 = vx[i-1, j]; vxi = vx[i, j]
+            wx[i,j] += dt * sigma_y[i,j] * (-1vxm4 + 5vxm3 - 9vxm2 - 17vxm1 + 22vxi) / (24dx)
+
+            vy_m4 = vy[i, j-4]; vy_m3 = vy[i, j-3]; vy_m2 = vy[i, j-2]; vy_m1 = vy[i, j-1]; vy_i = vy[i, j]
+            wy[i,j] += dt * sigma_x[i,j] * (-1vy_m4 + 5vy_m3 - 9vy_m2 - 17vy_m1 + 22vy_i) / (24dy)
+        end
     end
 
-    # Boundary points (one-sided differences)
-    if i == 2 && j > 2 && j < Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-22*vx[i-1,j] + 17*vx[i,j] + 9*vx[i+1,j] - 5*vx[i+2,j] + vx[i+3,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (vy[i,j-2] - 27*vy[i,j-1] + 27*vy[i,j] - vy[i,j+1]) / (24*dy)
+    return nothing
+end
+
+function copy_slice_kernel!(dest, src, slice_idx)
+    # CUDA kernel to copy src[:, :] into dest[:, :, slice_idx]
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    j = threadIdx().y + (blockIdx().y - 1) * blockDim().y
+
+    Nx, Ny = size(src)
+    if i >= 1 && i <= Nx && j >= 1 && j <= Ny
+        @inbounds dest[i, j, slice_idx] = src[i, j]
     end
 
-    if i == Nx-1 && j > 2 && j < Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-1*vx[i-4,j] + 5*vx[i-3,j] - 9*vx[i-2,j] - 17*vx[i-1,j] + 22*vx[i,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (vy[i,j-2] - 27*vy[i,j-1] + 27*vy[i,j] - vy[i,j+1]) / (24*dy)
-    end
-
-    if i > 2 && i < Nx-1 && j == 2
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (vx[i-2,j] - 27*vx[i-1,j] + 27*vx[i,j] - vx[i+1,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-22*vy[i,j-1] + 17*vy[i,j] + 9*vy[i,j+1] - 5*vy[i,j+2] + vy[i,j+3]) / (24*dy)
-    end
-
-    if i > 2 && i < Nx-1 && j == Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (vx[i-2,j] - 27*vx[i-1,j] + 27*vx[i,j] - vx[i+1,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-1*vy[i,j-4] + 5*vy[i,j-3] - 9*vy[i,j-2] - 17*vy[i,j-1] + 22*vy[i,j]) / (24*dy)
-    end
-
-    # four points
-    if i == 2 && j == 2
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-22*vx[i-1,j] + 17*vx[i,j] + 9*vx[i+1,j] - 5*vx[i+2,j] + vx[i+3,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-22*vy[i,j-1] + 17*vy[i,j] + 9*vy[i,j+1] - 5*vy[i,j+2] + vy[i,j+3]) / (24*dy)
-    end
-
-    if i == Nx-1 && j == 2
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-1*vx[i-4,j] + 5*vx[i-3,j] - 9*vx[i-2,j] - 17*vx[i-1,j] + 22*vx[i,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-22*vy[i,j-1] + 17*vy[i,j] + 9*vy[i,j+1] - 5*vy[i,j+2] + vy[i,j+3]) / (24*dy)
-    end
-
-    if i == 2 && j == Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-22*vx[i-1,j] + 17*vx[i,j] + 9*vx[i+1,j] - 5*vx[i+2,j] + vx[i+3,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-1*vy[i,j-4] + 5*vy[i,j-3] - 9*vy[i,j-2] - 17*vy[i,j-1] + 22*vy[i,j]) / (24*dy)
-    end
-
-    if i == Nx-1 && j == Ny-1
-        @inbounds wx[i,j] = wx[i,j] + dt * sigma_y[i,j] * (-1*vx[i-4,j] + 5*vx[i-3,j] - 9*vx[i-2,j] - 17*vx[i-1,j] + 22*vx[i,j]) / (24*dx)
-        @inbounds wy[i,j] = wy[i,j] + dt * sigma_x[i,j] * (-1*vy[i,j-4] + 5*vy[i,j-3] - 9*vy[i,j-2] - 17*vy[i,j-1] + 22*vy[i,j]) / (24*dy)
-    end
-
-    return nothing 
+    return nothing
 end

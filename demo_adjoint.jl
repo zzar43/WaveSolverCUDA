@@ -2,8 +2,8 @@ using BenchmarkTools, JLD2, CairoMakie
 
 # include("src/adjoint.jl")
 # include("src/forward.jl")
-include("src/WaveSolverCuda.jl")
-using .WaveSolverCuda
+include("src/WaveSolverCUDA.jl")
+using .WaveSolverCUDA
 
 demo = 2
 
@@ -40,7 +40,7 @@ if demo == 1
     end
     source_vals = zeros(Nt, source_num)
     for i = 1:source_num
-        source_vals[:,i] = source_ricker_int(8,0.2,t) * 1e6
+        source_vals[:,i] = source_ricker_int(5,0.2,t) * 1e6
     end
     
     receiver_num = 401
@@ -91,7 +91,7 @@ else
 
     Nx, Ny = size(c)
     dx, dy = 20, 20
-    Nt = 4000
+    Nt = 8000
     Fs = 500
     dt = 1/Fs
     t = range(0, (Nt-1)*dt, Nt)
@@ -134,7 +134,7 @@ else
     end
 
     println("    Computing adjoint...")
-    CUDA.@time gg = adjoint_c(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16)
+    CUDA.@time gg = adjoint_c(data, c0, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, saveRatio=2)
     println("    Done.")
 
     img = Array{myReal}(gg)'
@@ -144,5 +144,8 @@ else
     hm1 = heatmap!(img, colormap=:bwr, colorrange=(-val,val))
     Colorbar(fig1[1,2], hm1)
     save("data/adjoint_demo/demo2_adjoint.png", fig1)
+
+    grad_all_source = img
+    @save "grad_all_source.jld2" grad_all_source
 end
 

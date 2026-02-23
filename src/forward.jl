@@ -42,10 +42,16 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
     if recordWaveField == true
         U = CUDA.zeros(myReal, Nx, Ny, Int(floor(Nt/saveRatio)))
         # U = CUDA.zeros(myReal, Nx_pml, Ny_pml, Int(floor(Nt/saveRatio)))
+        # OPTIMIZATION: Precompute save indices to avoid modulo in hot loop
+        save_indices = [i for i in 1:Nt if i % saveRatio == 0]
+        save_counter = 1
     end
 
     # main loop, different order
     if idx_source == 0
+        # OPTIMIZATION: Keep all data on GPU, transfer once at the end
+        data_gpu = CUDA.zeros(myReal, Nt, receiver_num, source_num)
+        
         for idx = 1:source_num
 
             data0 = CUDA.zeros(myReal, Nt, receiver_num)
@@ -62,8 +68,12 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
 
                 @cuda blocks=cublocks_receiver threads=cuthreads_receiver record_wavefield!(u, receiver_position_x, receiver_position_y, data0, receiver_num, idx_time)
             end
-            data[:,:,idx] = Array{myReal}(data0)
+            # OPTIMIZATION: Use `CUDA.@allowscalar` to avoid accidental scalar slowdowns
+            @inbounds CUDA.@allowscalar data_gpu[:,:,idx] = data0
+            # @cuda blocks=cublocks_receiver threads=cuthreads_receiver copy_slice_kernel!(data_gpu, data0, idx)
         end
+        # OPTIMIZATION: Single CPU-GPU transfer after all sources processed
+        data = Array{myReal}(data_gpu)
     else
         for idx_time = 1:Nt
     
@@ -77,12 +87,10 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
     
             @cuda blocks=cublocks_receiver threads=cuthreads_receiver record_wavefield!(u, receiver_position_x, receiver_position_y, data, receiver_num, idx_time)
 
-            if recordWaveField == true
-                # U[:, :, idx_time] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
-                if idx_time % saveRatio == 0
-                    # U[:, :, Int(ceil(idx_time/saveRatio))] = u
-                    U[:, :, Int(ceil(idx_time/saveRatio))] = u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
-                end
+            # 2025-12-08: Optimization by cursor. I don't know why the original code is so slow. Please check it later.
+            @inbounds if recordWaveField && save_counter <= length(save_indices) && idx_time == save_indices[save_counter]
+                CUDA.@allowscalar U[:, :, save_counter] .= @view u[pml_len+1:end-pml_len, pml_len+1:end-pml_len]
+                save_counter += 1
             end
         end
     end
@@ -98,6 +106,14 @@ end
 function forward_acoustic_c(c, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, idx_source=0, recordWaveField=false, saveRatio=1)
 
     rho = 1000 .* ones(size(c))
+    a = -1 ./ rho
+    b = -1 .* rho .* c.^2
+
+    return forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=blockx, blocky=blocky, idx_source=idx_source, recordWaveField=recordWaveField, saveRatio=saveRatio)
+
+end
+
+function forward_acoustic_c_rho(c, rho, Nx, Ny, Nt, dx, dy, dt, source_num, source_position, source_vals, receiver_num, receiver_position, pml_len, pml_coef; blockx=16, blocky=16, idx_source=0, recordWaveField=false, saveRatio=1)
     a = -1 ./ rho
     b = -1 .* rho .* c.^2
 
