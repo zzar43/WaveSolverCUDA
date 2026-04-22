@@ -26,6 +26,7 @@ function update_source!(u, source_position_x, source_position_y, source_vals, so
         ix, iy = source_position_x[i], source_position_y[i]
         if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
             u[ix, iy] += source_vals[idx_time, i] * dt
+            # u[ix, iy] += source_vals[idx_time, i]
         end
     end
 
@@ -40,17 +41,50 @@ function update_source_idx!(u, source_position_x, source_position_y, source_vals
         ix, iy = source_position_x[i], source_position_y[i]
         if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
             u[ix, iy] += source_vals[idx_time, i] * dt
+            # u[ix, iy] += source_vals[idx_time, i]
         end
     end
 
     return nothing
 end
 
+# It seems slower than CPU version. Not used.
+function source_integration_on_device!(source_vals, source_num, Nt, dt)
+
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    if i >= 1 && i <= source_num
+        for idx_time = 1:Nt
+            for j = 1:Nt-idx_time+1
+                source_vals[Nt-idx_time+1, i] += source_vals[j, i]
+            end
+            source_vals[Nt-idx_time+1, i] *= dt
+        end
+    end
+
+    return nothing
+end
+
+# build adjoint source
+function build_adjoint_source!(adjoint_source, data, received_data, idx_source, Nt, receiver_num)
+
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    if i >= 1 && i <= receiver_num
+        for idx_time = 1:Nt
+            adjoint_source[Nt-idx_time+1, i] = data[idx_time, i] - received_data[idx_time, i, idx_source]
+        end
+    end
+
+    return nothing
+
+end
+
 # ==============================
 # RECEIVER
 # ==============================
 
-function record_wavefield!(u, receiver_position_x, receiver_position_y, receiver_vals, receiver_num, idx_time)
+function record_data!(u, receiver_position_x, receiver_position_y, receiver_vals, receiver_num, idx_time)
 
     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
 
@@ -61,6 +95,97 @@ function record_wavefield!(u, receiver_position_x, receiver_position_y, receiver
         end
     end
 
+    return nothing
+end
+
+function record_data!(u, receiver_position_x, receiver_position_y, receiver_vals, receiver_num, idx_time, idx_source)
+
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    if i <= receiver_num
+        ix, iy = receiver_position_x[i], receiver_position_y[i]
+        if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
+            receiver_vals[idx_time, i, idx_source] = u[ix, iy]
+        end
+    end
+
+    return nothing
+end
+
+function record_wavefield!(u, U, Nx, Ny, pml_len, idx_time)
+
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+
+    if i >= pml_len+1 && i <= Nx+pml_len && j >= pml_len+1 && j <= Ny+pml_len
+        U[i-pml_len,j-pml_len,idx_time] = u[i,j]
+    end
+
+    return nothing
+end
+
+function record_adj_wavefield_inner_product!(v, Utt, Nx, Ny, pml_len, idx_time, Nt)
+
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+
+    if i >= pml_len+1 && i <= Nx+pml_len && j >= pml_len+1 && j <= Ny+pml_len
+        Utt[i-pml_len,j-pml_len,Nt-idx_time+1] = Utt[i-pml_len,j-pml_len,Nt-idx_time+1] * v[i,j]
+    end
+
+    return nothing
+end
+
+function record_adj_wavefield!(u, U, Nx, Ny, pml_len, idx_time, Nt)
+
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+
+    if i >= pml_len+1 && i <= Nx+pml_len && j >= pml_len+1 && j <= Ny+pml_len
+        U[i-pml_len,j-pml_len,Nt-idx_time+1] = u[i,j]
+    end
+
+    return nothing
+end
+
+# ==============================
+# ADJOINT METHOD
+# ==============================
+function diff2_time_inplace_CUDA!(U, dt, Nx, Ny, Nt)
+
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+
+    if i >= 1 && i <= Nx && j >= 1 && j <= Ny
+
+        u_prev = U[i, j, 1]
+        u_curr = U[i, j, 2]
+        U[i, j, 1] = zero(eltype(U))
+        for idx_time in 2:Nt-1
+            u_next = U[i, j, idx_time+1]
+            U[i, j, idx_time] = (u_next - 2*u_curr + u_prev) / dt^2
+            u_prev = u_curr
+            u_curr = u_next
+        end
+        U[i, j, Nt] = zero(eltype(U))
+    end
+        
+    return nothing
+
+end
+
+function time_int_wavefield_c!(U, c, grad, dt)
+
+    i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+
+    if i >= 1 && i <= size(U,1) && j >= 1 && j <= size(U,2)
+        for idx_time = 2:size(U,3)-1
+            # grad[i,j] += 2 * U[i,j,idx_time] * dt / c[i,j]^3
+            grad[i,j] += 2 * U[i,j,idx_time] / c[i,j]^3
+        end
+    end
+    
     return nothing
 end
 
