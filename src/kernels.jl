@@ -58,7 +58,7 @@ function source_integration_on_device!(source_vals, source_num, Nt, dt)
             for j = 1:Nt-idx_time+1
                 source_vals[Nt-idx_time+1, i] += source_vals[j, i]
             end
-            source_vals[Nt-idx_time+1, i] *= dt
+            # source_vals[Nt-idx_time+1, i] *= dt
         end
     end
 
