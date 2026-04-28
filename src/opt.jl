@@ -3,6 +3,55 @@ using JLD2
 
 myReal = Float32
 
+function gradient_descent(u0, eval_fn, eval_grad, lamb; max_iter=10, beta=0.9, ls_time = 5, saveStep=false)
+    u = copy(u0)
+    lamb0 = copy(lamb)
+
+    for i = 1:max_iter
+        @printf "Iteration: %1d\n" i
+
+        save_file_name0 = pwd() * "/temp_data/"
+
+        fn0, grad = eval_grad(u)
+        u1 = u - lamb0 * grad
+        fn1 = eval_fn(u1)
+
+        if fn1 < fn0
+            @printf "    No line search needed.\n"
+            u = copy(u1)
+
+            if saveStep == true
+                save_file_name = save_file_name0 * string(i) * ".jld2"
+                @save save_file_name u
+            end
+
+            continue
+        else
+            @printf "    Line search needed.\n"
+            for j = 1:ls_time
+                lamb1 = lamb0 * beta^j
+                @printf "    Line search time: %1d, lamb=%1.5e\n" j lamb1
+                u1 = u - lamb1 * grad
+                fn1 = eval_fn(u1)
+                if fn1 < fn0
+                    @printf "    Line search succeed.\n"
+                    u = copy(u1)
+                    if saveStep == true
+                        save_file_name = save_file_name0 * string(i) * ".jld2"
+                        @save save_file_name u
+                    end
+                    break
+                else
+                    @printf "    Line search failed.\n"
+                    break
+                end
+            end
+        end
+
+    end
+    return u
+end
+
 # backtrack linesearch
 function linesearch_back(u_bar, u0, f_u0, eval_fn, eta; alpha=1, maxSearch=5)
     u1 = similar(u0)

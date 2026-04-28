@@ -10,8 +10,8 @@ include("kernels.jl")
 function source_integration(source_vals, Nt, dt)
     source_vals0 = 0 .* source_vals
     for idx_time = 1:Nt
-        # source_vals0[Nt-idx_time+1, :] = sum(source_vals[1:Nt-idx_time+1, :], dims=1) * dt
-        source_vals0[Nt-idx_time+1, :] = sum(source_vals[1:Nt-idx_time+1, :], dims=1)
+        source_vals0[Nt-idx_time+1, :] = sum(source_vals[1:Nt-idx_time+1, :], dims=1) * dt
+        # source_vals0[Nt-idx_time+1, :] = sum(source_vals[1:Nt-idx_time+1, :], dims=1)
     end
     return source_vals0
 end

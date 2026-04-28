@@ -12,6 +12,6 @@ include("inverse.jl")
 export eval_obj_fwi, eval_grad_fwi
 
 include("opt.jl")
-export lbfgs, lbfgsb
+export lbfgs, lbfgsb, gradient_descent
 
 end
