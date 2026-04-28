@@ -18,14 +18,14 @@ function update_source_fixed!(u, source_position_x, source_position_y, source_va
     return nothing
 end
 
-function update_source!(u, source_position_x, source_position_y, source_vals, source_num, idx_time, dt)
+function update_source!(u, source_position_x, source_position_y, source_vals, source_num, idx_time, dt, b_pml)
 
     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
 
     if i >= 1 && i <= source_num
         ix, iy = source_position_x[i], source_position_y[i]
         if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
-            u[ix, iy] += source_vals[idx_time, i] * dt
+            u[ix, iy] += source_vals[idx_time, i] * dt * b_pml[ix, iy]
             # u[ix, iy] += source_vals[idx_time, i]
         end
     end
@@ -33,14 +33,14 @@ function update_source!(u, source_position_x, source_position_y, source_vals, so
     return nothing
 end
 
-function update_source_idx!(u, source_position_x, source_position_y, source_vals, idx_source, idx_time, dt)
+function update_source_idx!(u, source_position_x, source_position_y, source_vals, idx_source, idx_time, dt, b_pml)
 
     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
 
     if i == idx_source
         ix, iy = source_position_x[i], source_position_y[i]
         if ix >= 1 && ix <= size(u,1) && iy >= 1 && iy <= size(u,2)
-            u[ix, iy] += source_vals[idx_time, i] * dt
+            u[ix, iy] += source_vals[idx_time, i] * dt * b_pml[ix, iy]
             # u[ix, iy] += source_vals[idx_time, i]
         end
     end
@@ -181,8 +181,9 @@ function time_int_wavefield_c!(U, c, grad, dt)
 
     if i >= 1 && i <= size(U,1) && j >= 1 && j <= size(U,2)
         for idx_time = 2:size(U,3)-1
-            # grad[i,j] += 2 * U[i,j,idx_time] * dt / c[i,j]^3
-            grad[i,j] += 2 * U[i,j,idx_time] / c[i,j]^3
+            # grad[i,j] -= 2 * U[i,j,idx_time] * dt / c[i,j]^3
+            # here we did not use the dt for more convenient gradient values.
+            grad[i,j] -= 2 * U[i,j,idx_time] / c[i,j]^3
         end
     end
     

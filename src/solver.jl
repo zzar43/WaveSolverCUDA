@@ -52,7 +52,7 @@ function acoustic_solver(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_positi
 
             @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
 
-            @cuda blocks=cublocks_source threads=cuthreads_source update_source!(u, source_position_x, source_position_y, source_vals_device, source_num, idx_time, dt)
+            @cuda blocks=cublocks_source threads=cuthreads_source update_source!(u, source_position_x, source_position_y, source_vals_device, source_num, idx_time, dt, b_pml)
     
             @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
     
@@ -71,7 +71,7 @@ function acoustic_solver(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_positi
 
             @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
     
-            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
+            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt, b_pml)
     
             @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
     
@@ -141,7 +141,7 @@ function forward_acoustic(a, b, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
 
             @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
     
-            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
+            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt, b_pml)
     
             @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
     
@@ -203,7 +203,7 @@ function backward_acoustic_c(c, Nx, Ny, Nt, dx, dy, dt, source_num, source_posit
 
         @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
 
-        @cuda blocks=cublocks_source threads=cuthreads_source update_source!(u, source_position_x, source_position_y, source_vals_device, source_num, idx_time, dt)
+        @cuda blocks=cublocks_source threads=cuthreads_source update_source!(u, source_position_x, source_position_y, source_vals_device, source_num, idx_time, dt, b_pml)
 
         @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
 
@@ -264,7 +264,7 @@ function adjoint_method_c0(received_data, c, Nx, Ny, Nt, dx, dy, dt, source_num,
 
             @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
     
-            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
+            @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt, b_pml)
     
             @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
     
@@ -292,7 +292,7 @@ function adjoint_method_c0(received_data, c, Nx, Ny, Nt, dx, dy, dt, source_num,
 
             @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
 
-            @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, idx_time, dt)
+            @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, idx_time, dt, b_pml)
 
             @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
 
@@ -383,7 +383,7 @@ function adjoint_method_c(received_data, c, Nx, Ny, Nt, dx, dy, dt, source_num, 
 
                 @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
         
-                @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt)
+                @cuda blocks=cublocks_source threads=cuthreads_source update_source_idx!(u, source_position_x, source_position_y, source_vals_device, idx_source, idx_time, dt, b_pml)
         
                 @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
         
@@ -416,7 +416,7 @@ function adjoint_method_c(received_data, c, Nx, Ny, Nt, dx, dy, dt, source_num, 
 
                 @cuda blocks=cublocks threads=cuthreads update_pressure_pml_4th!(u, vx, vy, wx, wy, sigma_x, sigma_y, b_pml, dx, dy, dt, Nx_pml, Ny_pml)
 
-                @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, idx_time, dt)
+                @cuda blocks=cublocks_receiver threads=cuthreads_receiver update_source!(u, receiver_position_x, receiver_position_y, adjoint_source, receiver_num, idx_time, dt, b_pml)
 
                 @cuda blocks=cublocks threads=cuthreads update_auxiliary_pml_4th!(wx, wy, vx, vy, sigma_x, sigma_y, dx, dy, dt, Nx_pml, Ny_pml)
 
